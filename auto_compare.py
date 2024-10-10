@@ -3,20 +3,42 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
+from time import sleep
+import os
+print(torch.cuda.is_available()) #输出是否支持cuda
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 如果支持cuda，则使用cuda
+print(f'Using device: {device}')
+
+transform = transforms.Compose([# 图像预处理
+    transforms.ToTensor(),
+    transforms.Normalize((0.1307,), (0.3081,))
+])
 # 定义模型架构
 class SimpleNet(nn.Module):
     def __init__(self):
         super(SimpleNet, self).__init__()
-        self.fc1 = nn.Linear(28 * 28, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 10)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.relu1 = nn.ReLU()
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.relu2 = nn.ReLU()
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.fc1 = nn.Linear(64 * 7 * 7, 128)
+        self.relu3 = nn.ReLU()
+        self.fc2 = nn.Linear(128, 10)
 
     def forward(self, x):
-        x = x.view(-1, 28 * 28)  # 将输入展平成一维向量
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.pool2(x)
+        x = x.view(-1, 64 * 7 * 7)
+        x = self.fc1(x)
+        x = self.relu3(x)
+        x = self.fc2(x)
         return x
 
 # 加载预训练的模型权重
@@ -27,67 +49,91 @@ def load_model(weights_path):
     return model
 
 # 图像预处理和分割
-def preprocess_and_segment(image):
+def preprocess(image):
     # 读取图像
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(image, 128, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    gray=cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    ret, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+    return binary
     
-    # 轮廓检测
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    digits = []
+    # cv2.imshow("image", binary)
+    # cv2.waitKey(0)
+
+def crop_pics(image,crop_areas):
+    # cv2.imshow("image", image)
+    cropped_img_list=[]
+    for i, crop_area in enumerate(crop_areas, start=1):
+        x1, y1, x2, y2 = crop_area
+        cropped_image =image[y1:y2, x1:x2]
+        cropped_img_list.append(cropped_image)
+    return  cropped_img_list
+
+def detect(image):
+    with torch.no_grad():
+            tensor=cv2.resize(image,(28,28))
+            # cv2.imshow("tensor", tensor)
+            # tensor = torch.from_numpy(tensor).float()
+            image_tensor = transform(tensor)
+            image_tensor=image_tensor.to(device)
+            #mat转为tensor
+            outputs = model(image_tensor)
+            _, predicted = torch.max(outputs, 1)
+            print(f'Predicted digit: {predicted.item()}')
+
+def recognize_digits(image, rgb_image):
+    contours, _=cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contour_img = rgb_image.copy()
+    cnt=0
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
-        digit = image[y:y+h, x:x+w]
+        cv2.drawContours(contour_img, [contour], 0, (0, 255, 0), 2)
+        cv2.rectangle(contour_img, (x-20, y-20), (x + w+20, y + h+20), (0, 255, 0), 2)
+        cv2.putText(contour_img, str(cnt), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cnt+=1
+    cv2.imshow("contour_img", contour_img)
+    cv2.waitKey(0)
+    # cv2.drawContours(contour_img, contours, -1, (0, 255, 0), 2)
+    if len(contours) ==1:
+        detect(image)
+    else:
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            if w > 10 and h > 10:
+                digit = image[y:y+h+20, x:x+w+20]
+                detect(digit)
+
         
-        # 将数字图像调整为 28x28 大小
-        digit = cv2.resize(digit, (28, 28), interpolation=cv2.INTER_AREA)
-        digit = np.expand_dims(digit, axis=-1)
-        digit = digit.astype(np.float32) / 255.0
-        digits.append(digit)
-    
-    return digits
-
-# 识别多个数字
-def recognize_digits(image, model):
-    digits = preprocess_and_segment(image)
-    if not digits:
-        return "No digits found"
-    
-    # 将所有数字图像堆叠成一个批次
-    digits = np.array(digits)
-    digits = np.expand_dims(digits, axis=1)  # 添加通道维度
-    digits = torch.from_numpy(digits)
-    
-    model.eval()
-    with torch.no_grad():
-        outputs = model(digits)
-        _, predicted = torch.max(outputs.data, 1)
-    
-    # 组合结果
-    result = ''.join(map(str, predicted.numpy()))
-    return result
-
-# 封装整个流程的函数
-def recognize_digits_from_image(image_path, weights_path):
-    # 读取图像
-    image = cv2.imread(image_path)
-    
-    # 加载模型
-    model = load_model(weights_path)
-    
-    # 识别数字
-    result = recognize_digits(image, model)
-    return result
 
 # 主函数
 if __name__ == "__main__":
+    #图片裁剪区域，四个参数为左，上，右，下
+    crop_areas = [
+        (330, 720, 530, 880),
+        (730, 720, 930, 880)
+    ]
+    
+
     # 模型权重路径
     weights_path = 'model/model.pth'
     
     # 图像路径
-    image_path = 'path/to/your/image.png'
+    image_path = 'pictures/1&19.jpg'
     
-    # 识别数字
-    # result = recognize_digits_from_image(image_path, weights_path)
-    # print(f'Recognized digits: {result}')
+    img=cv2.imread(image_path, cv2.IMREAD_COLOR)
+    grey=preprocess(img)
+    model=SimpleNet().to(device)
+    model.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
+    model.eval()
+    
+    
+    img_list=crop_pics(grey,crop_areas)#进行扣图
+    rgb_img_list=crop_pics(img,crop_areas)
+    recognize_digits(img_list[0],rgb_img_list[0] )
+    recognize_digits(img_list[1], rgb_img_list[1] )
+    # detect(img_list[0])
+    # detect(img_list[1])
+    cv2.imshow("img", img_list[0])
+    cv2.imshow("img2",img_list[1]) 
+    cv2.waitKey(0)
+    
+    
+    
