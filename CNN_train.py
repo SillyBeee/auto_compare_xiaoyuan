@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-
+from torch.utils.data import Dataset
+import os
 # 定义超参数
 batch_size = 64
 learning_rate = 0.001
@@ -16,7 +17,7 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.1307,), (0.3081,))
 ])
-datasets_path="train_datasets"
+
 
 # 加载 MNIST 数据集
 train_dataset = torchvision.datasets.MNIST(root='./data', train=True, transform=transform, download=True)
@@ -24,6 +25,14 @@ test_dataset = torchvision.datasets.MNIST(root='./data', train=False, transform=
 
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
+
+class Mydatasets(Dataset):
+    def __init__(self, root_dir ,transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.images = os.listdir(root_dir)
+        
+    
 # 定义简单的神经网络模型
 class SimpleNet(nn.Module):
     def __init__(self):
