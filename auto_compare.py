@@ -48,16 +48,18 @@ def load_model(weights_path):
     model.eval()
     return model
 
-# 图像预处理和分割
+# 图像预处理，返回二值化图像
 def preprocess(image):
     # 读取图像
     gray=cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     ret, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+    # binary=255-binary
     return binary
     
     # cv2.imshow("image", binary)
     # cv2.waitKey(0)
 
+#剪切ROI区域
 def crop_pics(image,crop_areas):
     # cv2.imshow("image", image)
     cropped_img_list=[]
@@ -66,13 +68,17 @@ def crop_pics(image,crop_areas):
         cropped_image =image[y1:y2, x1:x2]
         cropped_img_list.append(cropped_image)
     return  cropped_img_list
-
+def show_tensor(image):
+    image=transforms.ToPILImage()(image)
+    image.show()
+    cv2.waitKey(0)
+#推理，输入图片，输出预测
 def detect(image):
+    image=255-image
     with torch.no_grad():
             tensor=cv2.resize(image,(28,28))
-            # cv2.imshow("tensor", tensor)
-            # tensor = torch.from_numpy(tensor).float()
             image_tensor = transform(tensor)
+            show_tensor(image_tensor)
             image_tensor=image_tensor.to(device)
             #mat转为tensor
             outputs = model(image_tensor)
@@ -86,19 +92,22 @@ def recognize_digits(image, rgb_image):
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
         cv2.drawContours(contour_img, [contour], 0, (0, 255, 0), 2)
-        cv2.rectangle(contour_img, (x-20, y-20), (x + w+20, y + h+20), (0, 255, 0), 2)
+        cv2.rectangle(contour_img, (x-10, y-20), (x + w+10, y + h+20), (0, 255, 0), 2)
         cv2.putText(contour_img, str(cnt), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cnt+=1
     cv2.imshow("contour_img", contour_img)
     cv2.waitKey(0)
     # cv2.drawContours(contour_img, contours, -1, (0, 255, 0), 2)
     if len(contours) ==1:
-        detect(image)
+        x, y, w, h = cv2.boundingRect(contours[0])
+        if w > 10 and h > 10:
+                digit = image[y-20:y+h+20, x-25:x+w+25]
+                detect(digit)
     else:
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
             if w > 10 and h > 10:
-                digit = image[y:y+h+20, x:x+w+20]
+                digit = image[y-20:y+h+20, x-25:x+w+25]
                 detect(digit)
 
         
@@ -116,7 +125,7 @@ if __name__ == "__main__":
     weights_path = 'model/model.pth'
     
     # 图像路径
-    image_path = 'pictures/1&19.jpg'
+    image_path = 'pictures/4&11.jpg'
     
     img=cv2.imread(image_path, cv2.IMREAD_COLOR)
     grey=preprocess(img)
@@ -131,8 +140,8 @@ if __name__ == "__main__":
     recognize_digits(img_list[1], rgb_img_list[1] )
     # detect(img_list[0])
     # detect(img_list[1])
-    cv2.imshow("img", img_list[0])
-    cv2.imshow("img2",img_list[1]) 
+    # cv2.imshow("img", img_list[0])
+    # cv2.imshow("img2",img_list[1]) 
     cv2.waitKey(0)
     
     
