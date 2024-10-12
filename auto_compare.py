@@ -5,6 +5,7 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 from time import sleep
 import os
+import pyautogui
 print(torch.cuda.is_available()) #输出是否支持cuda
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 如果支持cuda，则使用cuda
@@ -84,6 +85,8 @@ def detect(image):
             outputs = model(image_tensor)
             _, predicted = torch.max(outputs, 1)
             print(f'Predicted digit: {predicted.item()}')
+            return int(predicted.item())
+            
 
 def recognize_digits(image, rgb_image):
     contours, _=cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -97,19 +100,42 @@ def recognize_digits(image, rgb_image):
         cnt+=1
     cv2.imshow("contour_img", contour_img)
     cv2.waitKey(0)
+    num = []
+    
     # cv2.drawContours(contour_img, contours, -1, (0, 255, 0), 2)
     if len(contours) ==1:
         x, y, w, h = cv2.boundingRect(contours[0])
         if w > 10 and h > 10:
                 digit = image[y-20:y+h+20, x-25:x+w+25]
-                detect(digit)
+                return detect(digit)
     else:
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
             if w > 10 and h > 10:
                 digit = image[y-20:y+h+20, x-25:x+w+25]
-                detect(digit)
+                num_predict = detect(digit)
+                num.append(num_predict)
+        result = num[0]+ 10*num[1]
+        return result
 
+def take_screen_shot(screen_shot_path):
+    
+    os.system(f'adb shell screencap -p > {screen_shot_path}')
+ 
+    # 读取截取的屏幕截图并替换行结束符
+    with open(screen_shot_path, 'rb') as f:
+        return f.read().replace(b'\r\n', b'\n')
+      
+def draw_bigger():
+
+def draw_smaller():
+    
+def compare_num(left , right):
+    if (left > right):
+        draw_bigger()
+    if (left < right):
+        draw_smaller()
+    
         
 
 # 主函数
@@ -123,7 +149,8 @@ if __name__ == "__main__":
 
     # 模型权重路径
     weights_path = 'model/model.pth'
-    
+    #快照路径
+    screen_shot_path = 'screen_shot'
     # 图像路径
     image_path = 'pictures/4&11.jpg'
     
