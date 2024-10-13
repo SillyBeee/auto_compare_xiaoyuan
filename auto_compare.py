@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -67,6 +66,10 @@ def crop_pics(image,crop_areas):
         x1, y1, x2, y2 = crop_area
         cropped_image =image[y1:y2, x1:x2]
         cropped_img_list.append(cropped_image)
+    if len(cropped_img_list)!=2:
+        print("cropped length error")
+        exit()
+        
     return  cropped_img_list
 def show_tensor(image):
     image=transforms.ToPILImage()(image)
@@ -75,6 +78,9 @@ def show_tensor(image):
 #推理，输入图片，输出预测
 def detect(image):
     image=255-image
+    if image is None:
+        print("供推理图片为空")
+        exit()
     with torch.no_grad():
             tensor=cv2.resize(image,(28,28))
             image_tensor = transform(tensor)
@@ -93,8 +99,8 @@ def recognize_digits(image, rgb_image):
     cnt=0
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
-        cv2.drawContours(contour_img, [contour], 0, (0, 255, 0), 2)
-        cv2.rectangle(contour_img, (x-10, y-20), (x + w+10, y + h+20), (0, 255, 0), 2)
+        cv2.drawContours(contour_img, [contour], 0, (0, 255-100*cnt, 0), 2)
+        cv2.rectangle(contour_img, (x-25, y-20), (x + w+25, y + h+20), (0, 255, 0), 2)
         cv2.putText(contour_img, str(cnt), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cnt+=1
     # cv2.imshow("contour_img", contour_img)
@@ -107,17 +113,24 @@ def recognize_digits(image, rgb_image):
         if w > 10 and h > 10:
                 digit = image[y-20:y+h+20, x-25:x+w+25]
                 return detect(digit)
-    else:
-        left_x=1000
+    if len(contours) == 2:
+        min_x=1000
         count=0
+        target=-1
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
-            if w > 10 and h > 10:
+            if  w > 10 and h > 10: #当找到符合条件且最左的数字时，记录其位置             
                 digit = image[y-20:y+h+20, x-25:x+w+25]
                 num_predict = detect(digit)
                 num.append(num_predict)
-        result = num[0]+ 10*num[1]
-        return result
+            if x<min_x:
+                min_x=x
+                target=count
+            count+=1
+        if target == 0:
+            return num[0]*10+num[1]
+        if target == 1:
+            return num[0]+num[1]*10
 
 def take_screen_shot(screen_shot_path):
     
@@ -151,8 +164,8 @@ def compare_numbers(left, right):
 if __name__ == "__main__":
     #图片裁剪区域，四个参数为左，上，右，下
     crop_areas = [
-        (330, 720, 530, 880),
-        (730, 720, 930, 880)
+        (300, 720, 530, 880),
+        (700, 720, 930, 880)
     ]
     
 
@@ -168,18 +181,29 @@ if __name__ == "__main__":
     while True:
         take_screen_shot(screen_shot_path)
         img=cv2.imread(image_path, cv2.IMREAD_COLOR)
+        if img is None:
+            print("读取图片失败")
+            continue
         grey=preprocess(img) 
         img_list=crop_pics(grey,crop_areas)#进行扣图
         rgb_img_list=crop_pics(img,crop_areas)
         left_num=recognize_digits(img_list[0],rgb_img_list[0] )
         right_num=recognize_digits(img_list[1], rgb_img_list[1] )
+        if (left_num is None) or (right_num is None):
+            print("未识别到数字")
+            continue
         compare_numbers(left_num, right_num)
-        sleep(0.5)
-        # detect(img_list[0])
-        # detect(img_list[1])
-        # cv2.imshow("img", img_list[0])
-        # cv2.imshow("img2",img_list[1]) 
-        cv2.waitKey(0)
+        sleep(0.3)
+    # img=cv2.imread(image_path, cv2.IMREAD_COLOR)
+    # grey=preprocess(img) 
+    # img_list=crop_pics(grey,crop_areas)#进行扣图
+    # rgb_img_list=crop_pics(img,crop_areas)
+    # left_num=recognize_digits(img_list[0],rgb_img_list[0] )
+    # right_num=recognize_digits(img_list[1], rgb_img_list[1] )
+    
+    # cv2.imshow("img", img_list[0])
+    # cv2.imshow("img2",img_list[1]) 
+    # cv2.waitKey(0)
     
     
     
