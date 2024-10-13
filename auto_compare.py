@@ -108,6 +108,8 @@ def recognize_digits(image, rgb_image):
                 digit = image[y-20:y+h+20, x-25:x+w+25]
                 return detect(digit)
     else:
+        left_x=1000
+        count=0
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
             if w > 10 and h > 10:
