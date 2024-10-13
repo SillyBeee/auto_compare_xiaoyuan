@@ -5,7 +5,6 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 from time import sleep
 import os
-import pyautogui
 print(torch.cuda.is_available()) #输出是否支持cuda
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 如果支持cuda，则使用cuda
@@ -79,7 +78,7 @@ def detect(image):
     with torch.no_grad():
             tensor=cv2.resize(image,(28,28))
             image_tensor = transform(tensor)
-            show_tensor(image_tensor)
+            # show_tensor(image_tensor)
             image_tensor=image_tensor.to(device)
             #mat转为tensor
             outputs = model(image_tensor)
@@ -98,8 +97,8 @@ def recognize_digits(image, rgb_image):
         cv2.rectangle(contour_img, (x-10, y-20), (x + w+10, y + h+20), (0, 255, 0), 2)
         cv2.putText(contour_img, str(cnt), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cnt+=1
-    cv2.imshow("contour_img", contour_img)
-    cv2.waitKey(0)
+    # cv2.imshow("contour_img", contour_img)
+    # cv2.waitKey(0)
     num = []
     
     # cv2.drawContours(contour_img, contours, -1, (0, 255, 0), 2)
@@ -127,16 +126,24 @@ def take_screen_shot(screen_shot_path):
         return f.read().replace(b'\r\n', b'\n')
       
 def draw_bigger():
+    os.system("adb shell input swipe 450 1800 850 1900 1")
+    os.system("adb shell input swipe 850 1900 450 2000 1")
 
 def draw_smaller():
+    os.system("adb shell input swipe 850 1800 450 1900 1")
+    os.system("adb shell input swipe 450 1900 850 2000 1")
+
+def compare_numbers(left, right):
     
-def compare_num(left , right):
-    if (left > right):
-        draw_bigger()
-    if (left < right):
-        draw_smaller()
-    
-        
+    try:
+        if left > right:
+            print(f"{left} > {right}")
+            draw_bigger()
+        else:
+            print(f"{left} < {right}")
+            draw_smaller()
+    except ValueError:
+        print("数字格式无效。")
 
 # 主函数
 if __name__ == "__main__":
@@ -150,26 +157,27 @@ if __name__ == "__main__":
     # 模型权重路径
     weights_path = 'model/model.pth'
     #快照路径
-    screen_shot_path = 'screen_shot'
+    screen_shot_path = 'screen_shot/screenshot.png'
     # 图像路径
-    image_path = 'pictures/4&11.jpg'
-    
-    img=cv2.imread(image_path, cv2.IMREAD_COLOR)
-    grey=preprocess(img)
+    image_path = 'screen_shot/screenshot.png'
     model=SimpleNet().to(device)
     model.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
     model.eval()
-    
-    
-    img_list=crop_pics(grey,crop_areas)#进行扣图
-    rgb_img_list=crop_pics(img,crop_areas)
-    recognize_digits(img_list[0],rgb_img_list[0] )
-    recognize_digits(img_list[1], rgb_img_list[1] )
-    # detect(img_list[0])
-    # detect(img_list[1])
-    # cv2.imshow("img", img_list[0])
-    # cv2.imshow("img2",img_list[1]) 
-    cv2.waitKey(0)
+    while True:
+        take_screen_shot(screen_shot_path)
+        img=cv2.imread(image_path, cv2.IMREAD_COLOR)
+        grey=preprocess(img) 
+        img_list=crop_pics(grey,crop_areas)#进行扣图
+        rgb_img_list=crop_pics(img,crop_areas)
+        left_num=recognize_digits(img_list[0],rgb_img_list[0] )
+        right_num=recognize_digits(img_list[1], rgb_img_list[1] )
+        compare_numbers(left_num, right_num)
+        sleep(0.5)
+        # detect(img_list[0])
+        # detect(img_list[1])
+        # cv2.imshow("img", img_list[0])
+        # cv2.imshow("img2",img_list[1]) 
+        cv2.waitKey(0)
     
     
     
